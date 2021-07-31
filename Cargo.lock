@@ -26,6 +26,7 @@ dependencies = [
 name = "bfrs"
 version = "0.1.0"
 dependencies = [
+ "bfrs_common",
  "structopt",
 ]
 
@@ -37,6 +38,7 @@ version = "0.1.0"
 name = "bfrs_patterns"
 version = "0.1.0"
 dependencies = [
+ "bfrs_common",
  "structopt",
 ]
 

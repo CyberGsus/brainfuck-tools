@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use bfrs_common::BFCommand;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -18,34 +19,6 @@ struct Opt {
     file: PathBuf,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-enum BFCommand {
-    BeginLoop = b'[',
-    EndLoop = b']',
-    Print = b'.',
-    Read = b',',
-    Increment = b'+',
-    Decrement = b'-',
-    Right = b'>',
-    Left = b'<',
-}
-
-impl BFCommand {
-    pub fn from_u8(byte: u8) -> Option<Self> {
-        Some(match byte {
-            b'[' => Self::BeginLoop,
-            b']' => Self::EndLoop,
-            b'.' => Self::Print,
-            b',' => Self::Read,
-            b'+' => Self::Increment,
-            b'-' => Self::Decrement,
-            b'>' => Self::Right,
-            b'<' => Self::Left,
-            _ => return None,
-        })
-    }
-}
 
 #[derive(Debug)]
 enum Pattern {
