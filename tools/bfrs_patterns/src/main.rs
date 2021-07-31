@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use bfrs_common::BFCommand;
+use bfrs_common::{BFCommand, Position};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -54,40 +54,6 @@ impl std::fmt::Display for ParseError {
 
 impl Error for ParseError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Position {
-    pub column: usize,
-    pub line: usize,
-}
-
-impl Default for Position {
-    fn default() -> Self {
-        Self { column: 1, line: 1 }
-    }
-}
-
-impl Position {
-    #[inline]
-    pub fn advance_char(&mut self, ch: char) {
-        if ch == '\n' {
-            self.line += 1;
-            self.column = 0;
-        } else {
-            self.column += 1;
-        }
-    }
-
-    #[inline]
-    pub fn advance_col(&mut self) {
-        self.column += 1;
-    }
-}
-
-impl std::fmt::Display for Position {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}:{}", self.line, self.column)
-    }
-}
 
 fn main() {
     if let Err(ref e) = run() {
