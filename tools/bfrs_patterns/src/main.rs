@@ -1,6 +1,6 @@
-use bfrs_patterns::r#match::MatchSM;
-use bfrs_patterns::pattern::Pattern;
 use bfrs_common::{BFCommand, Position};
+use bfrs_patterns::pattern::Pattern;
+use bfrs_patterns::r#match::MatchSM;
 use std::error::Error;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -79,22 +79,12 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn parse_pattern(line: &str) -> Result<Vec<Pattern>, ParseError> {
     let mut output = Vec::new();
-    let mut loop_backlog = Vec::new();
     let line_chars: Vec<_> = line.chars().collect();
     let mut line_i = 0;
     let mut current_pos = Position::default();
     while let Some(&ch) = line_chars.get(line_i) {
         if ch.is_ascii() {
             if let Some(instr) = BFCommand::from_u8(ch as u8) {
-                match instr {
-                    BFCommand::BeginLoop => loop_backlog.push(current_pos),
-                    BFCommand::EndLoop => {
-                        if loop_backlog.pop().is_none() {
-                            return Err(ParseError::MissingLB(current_pos));
-                        }
-                    }
-                    _ => (),
-                }
                 current_pos.advance_char(ch);
                 output.push(Pattern::Instruction(instr));
                 line_i += 1;
@@ -125,11 +115,7 @@ fn parse_pattern(line: &str) -> Result<Vec<Pattern>, ParseError> {
             position: current_pos,
         });
     }
-    if let Some(pos) = loop_backlog.pop() {
-        Err(ParseError::MissingRB(pos))
-    } else {
-        Ok(output)
-    }
+    Ok(output)
 }
 fn parse_instructions(source: &[u8]) -> Result<Vec<BFCommand>, ParseError> {
     let mut output = Vec::new();
