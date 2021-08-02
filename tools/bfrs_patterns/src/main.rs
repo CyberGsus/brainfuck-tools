@@ -1,5 +1,6 @@
+use bfrs_patterns::r#match::MatchSM;
+use bfrs_patterns::pattern::Pattern;
 use bfrs_common::{BFCommand, Position};
-use bfrs_patterns::*;
 use std::error::Error;
 use std::path::PathBuf;
 use structopt::StructOpt;
