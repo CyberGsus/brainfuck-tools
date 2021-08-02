@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "interpreter/bfrs",
-  "src/bfrs_common",
+  "lib/bfrs_common",
+  "lib/bfrs_input",
   "tools/bfrs_patterns"
 ]

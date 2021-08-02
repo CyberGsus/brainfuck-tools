@@ -9,4 +9,4 @@ edition = "2018"
 structopt = "*"
 
 [dependencies.bfrs_common]
-path = "../../src/bfrs_common"
+path = "../../lib/bfrs_common"

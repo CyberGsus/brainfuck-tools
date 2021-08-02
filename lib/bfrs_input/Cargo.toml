@@ -1,16 +1,8 @@
 [package]
-name = "bfrs_patterns"
+name = "bfrs_input"
 version = "0.1.0"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-structopt = "0.3"
-
-[dependencies.bfrs_common]
-path = "../../lib/bfrs_common"
-
-[lib]
-name = "bfrs_patterns"
-path = "src/lib.rs"

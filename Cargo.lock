@@ -35,6 +35,10 @@ name = "bfrs_common"
 version = "0.1.0"
 
 [[package]]
+name = "bfrs_input"
+version = "0.1.0"
+
+[[package]]
 name = "bfrs_patterns"
 version = "0.1.0"
 dependencies = [
