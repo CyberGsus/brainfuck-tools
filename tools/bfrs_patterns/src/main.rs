@@ -1,4 +1,6 @@
+use bfrs_common::parser;
 use bfrs_common::{BFCommand, Position};
+use bfrs_input::bytes::BufferedBytes;
 use bfrs_patterns::pattern::Pattern;
 use bfrs_patterns::r#match::MatchSM;
 use std::error::Error;
@@ -22,18 +24,12 @@ struct Opt {
 
 #[derive(Debug)]
 enum ParseError {
-    MissingLB(Position),
-    MissingRB(Position),
     UnknownChar { bad_char: char, position: Position },
 }
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::MissingLB(lb_pos) => write!(f, "Unmatched right bracket at {}", lb_pos),
-            Self::MissingRB(rb_pos) => {
-                write!(f, "Unclosed loop: last opening was found at {}", rb_pos)
-            }
             Self::UnknownChar { bad_char, position } => {
                 write!(f, "invalid char at {}: {:?}", position, bad_char)
             }
@@ -55,13 +51,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     let pat = parse_pattern(&opt.pattern)?;
     let src = {
         use std::fs::File;
-        use std::io::Read;
-        let mut input = File::open(opt.file)?;
-        let mut str = Vec::new();
-        input.read_to_end(&mut str)?;
-        str
+        let input = File::open(opt.file)?;
+        BufferedBytes::new(input)
     };
-    let instructions = parse_instructions(&src)?;
+
+    let instructions: Vec<_> = parser::parse(src).collect::<Result<_, _>>()?;
 
     for res in MatchSM::find_all(&instructions, &pat) {
         let str: String = res.commands.iter().map(|&i| i as u8 as char).collect();
@@ -116,33 +110,4 @@ fn parse_pattern(line: &str) -> Result<Vec<Pattern>, ParseError> {
         });
     }
     Ok(output)
-}
-fn parse_instructions(source: &[u8]) -> Result<Vec<BFCommand>, ParseError> {
-    let mut output = Vec::new();
-    let mut loop_backlog = Vec::new();
-    let mut current_pos = Position::default();
-    for byte in source {
-        if let Some(instr) = BFCommand::from_u8(*byte) {
-            match instr {
-                BFCommand::BeginLoop => loop_backlog.push(current_pos),
-                BFCommand::EndLoop => {
-                    if loop_backlog.pop().is_none() {
-                        return Err(ParseError::MissingLB(current_pos));
-                    }
-                }
-                _ => (),
-            }
-            output.push(instr);
-        }
-        if byte.is_ascii() {
-            current_pos.advance_char(*byte as char)
-        } else {
-            current_pos.advance_col()
-        }
-    }
-    if let Some(pos) = loop_backlog.pop() {
-        Err(ParseError::MissingRB(pos))
-    } else {
-        Ok(output)
-    }
 }
