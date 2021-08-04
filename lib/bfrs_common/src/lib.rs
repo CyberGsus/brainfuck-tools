@@ -1,3 +1,4 @@
+pub mod errors;
 pub mod parser;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -34,7 +35,6 @@ impl fmt::Display for BFCommand {
         write!(f, "{}", *self as u8 as char)
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
