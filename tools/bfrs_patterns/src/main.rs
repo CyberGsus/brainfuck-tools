@@ -1,5 +1,4 @@
 use bfrs_common::parser;
-use bfrs_common::{BFCommand, Position};
 use bfrs_input::bytes::BufferedBytes;
 use bfrs_patterns::r#match::MatchSM;
 use std::error::Error;
@@ -38,7 +37,6 @@ fn run() -> Result<(), Box<dyn Error>> {
     };
 
     let instructions: Vec<_> = parser::parse(src).collect::<Result<_, _>>()?;
-
 
     for res in MatchSM::find_all(&instructions, &scope) {
         let str: String = res.commands.iter().map(|&i| i as u8 as char).collect();
