@@ -1,3 +1,5 @@
+use crate::pattern::PatternScope;
+
 use super::pattern::Pattern;
 use bfrs_common::BFCommand;
 use std::collections::HashMap;
@@ -7,29 +9,25 @@ use std::collections::HashMap;
 /// and their relative offsets.
 pub struct MatchResult<'a> {
     pub commands: &'a [BFCommand],
-    pub relative_offsets: HashMap<String, HashMap<String, isize>>,
+    pub relative_offsets: HashMap<usize, HashMap<usize, isize>>,
 }
 /// A state machine to keep track of local state
 /// in a matching context
 pub struct MatchSM<'a> {
     instructions: &'a [BFCommand],
-    registry: HashMap<String, HashMap<String, isize>>,
+    registry: HashMap<usize, HashMap<usize, isize>>,
     offset: usize,
-    last_binding: Option<String>,
+    last_binding: Option<usize>,
 }
 
-// NOTE: there's A TON of string copying being involved. Take a look at this.
-// Probably using only `usize` in the registry, and having a separate binding vector
-// is the way to go. It would be interesting that a pattern can have a scope of associated
-// binding names, and use numbers there as well.
 impl<'a> MatchSM<'a> {
     /// Obtain all possible matches from the same pattern group
     // NOTE: make pattern groups a distinction from a pattern itself.
-    pub fn find_all(instructions: &'a [BFCommand], patterns: &[Pattern]) -> Vec<MatchResult<'a>> {
+    pub fn find_all(instructions: &'a [BFCommand], scope: &PatternScope) -> Vec<MatchResult<'a>> {
         let mut offset = 0;
         let mut result = Vec::new();
         while offset < instructions.len() {
-            if let Some(res) = Self::match_single(&instructions[offset..], patterns) {
+            if let Some(res) = Self::match_single(&instructions[offset..], scope) {
                 // advance by the match length.
                 offset += res.commands.len();
                 result.push(res);
@@ -42,10 +40,10 @@ impl<'a> MatchSM<'a> {
     /// Match a pattern through the beginning of the instructions
     pub fn match_single(
         instructions: &'a [BFCommand],
-        patterns: &[Pattern],
+        scope: &PatternScope,
     ) -> Option<MatchResult<'a>> {
         let mut machine = Self::new(instructions);
-        for pat in patterns {
+        for pat in scope.patterns.iter() {
             if let Some(optional_action) = machine.match_target(pat) {
                 if let Some(action) = optional_action {
                     machine.run_action(action);
@@ -55,7 +53,11 @@ impl<'a> MatchSM<'a> {
             }
         }
         Some(MatchResult {
-            commands: &instructions[..machine.offset],
+            commands: if machine.offset == 0 {
+                instructions
+            } else {
+                &instructions[..machine.offset]
+            },
             relative_offsets: machine.registry,
         })
     }
@@ -70,17 +72,17 @@ impl<'a> MatchSM<'a> {
     fn run_action(&mut self, action: MatchSMAction) {
         match action {
             MatchSMAction::AdvanceInput { amount } => self.offset += amount,
-            MatchSMAction::SetLastBinding { name } => self.last_binding = Some(name),
+            MatchSMAction::SetLastBinding { binding } => self.last_binding = Some(binding),
             MatchSMAction::NewBinding {
                 offset_from_last,
-                name,
+                binding: name,
             } => {
                 match self.last_binding {
                     None => {
                         // without a known last, the `offset_from_last` parameter
                         // is ignored and the binding is created with a single reference
                         // to itself.
-                        self.registry.insert(name.clone(), {
+                        self.registry.insert(name, {
                             let mut map = HashMap::new();
                             map.insert(name, 0);
                             map
@@ -90,22 +92,22 @@ impl<'a> MatchSM<'a> {
                         // calculate the offsets from the name to the
                         // others, using its offset from the last one
                         // as the only common thing between them.
-                        let this_offsets: HashMap<String, isize> = {
+                        let this_offsets: HashMap<usize, isize> = {
                             let mut initial: HashMap<_, _> = self
                                 .registry
                                 .iter()
                                 .map(|(other_k, other_map)| {
-                                    (other_k.clone(), other_map[last] + offset_from_last)
+                                    (*other_k, other_map[last] + offset_from_last)
                                 })
                                 .collect();
 
-                            initial.insert(name.clone(), 0);
+                            initial.insert(name, 0);
                             initial
                         };
 
                         // now make edges in the opposite direction.
                         for (other_k, other_map) in self.registry.iter_mut() {
-                            other_map.insert(name.clone(), -this_offsets[other_k]);
+                            other_map.insert(name, -this_offsets[other_k]);
                         }
 
                         self.registry.insert(name, this_offsets);
@@ -124,14 +126,16 @@ impl<'a> MatchSM<'a> {
     fn match_target(&self, target: &Pattern) -> Option<Option<MatchSMAction>> {
         match target {
             Pattern::Instruction(instr) => self.match_instruction(*instr).map(Some),
-            Pattern::Address { binding } => {
+            Pattern::Binding { index, strict } => {
+                let binding = *index;
+                let strict = *strict;
                 let (offt, a) = self.calculate_offset();
+                if strict && offt == 0 {
+                    return None;
+                }
                 self.match_binding(binding, offt).map(|b| {
-                    MatchSMAction::chain_optionals(a, b).map(|c| {
-                        c.chain_with(MatchSMAction::SetLastBinding {
-                            name: binding.clone(),
-                        })
-                    })
+                    MatchSMAction::chain_optionals(a, b)
+                        .map(|c| c.chain_with(MatchSMAction::SetLastBinding { binding }))
                 })
             }
         }
@@ -139,23 +143,23 @@ impl<'a> MatchSM<'a> {
 
     fn match_binding(
         &self,
-        binding: &str,
+        binding: usize,
         offset_from_last: isize,
     ) -> Option<Option<MatchSMAction>> {
         match self.last_binding {
             Some(ref last) => {
-                if !self.registry.contains_key(binding) {
+                if !self.registry.contains_key(&binding) {
                     // a first-time binding will always match,
                     // as there is no older position to compare it to.
                     Some(Some(MatchSMAction::NewBinding {
                         offset_from_last,
-                        name: binding.into(),
+                        binding,
                     }))
                 } else {
                     // with a known last for reference, the offset
                     // can be checked for consistency with the previously
                     // recorded offset.
-                    if self.registry[binding][last] == offset_from_last {
+                    if self.registry[&binding][last] == offset_from_last {
                         // success, but nothing to do.
                         Some(None)
                     } else {
@@ -170,7 +174,7 @@ impl<'a> MatchSM<'a> {
                 // compare its solidity.
                 Some(Some(MatchSMAction::NewBinding {
                     offset_from_last,
-                    name: binding.into(),
+                    binding,
                 }))
             }
         }
@@ -228,13 +232,13 @@ enum MatchSMAction {
     /// a new binding was discovered.
     NewBinding {
         offset_from_last: isize,
-        name: String,
+        binding: usize,
     },
     AdvanceInput {
         amount: usize,
     },
     SetLastBinding {
-        name: String,
+        binding: usize,
     },
     Chain(Vec<MatchSMAction>),
 }
