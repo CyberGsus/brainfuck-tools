@@ -7,6 +7,7 @@ edition = "2018"
 
 [dependencies]
 structopt = "*"
+bfrs_input = { path = "../../lib/bfrs_input" }
 
 [dependencies.bfrs_common]
 path = "../../lib/bfrs_common"

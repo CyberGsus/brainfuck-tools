@@ -1,60 +1,7 @@
+use bfrs_common::{parser, BFCommand};
 use std::error::Error;
 use std::fs::File;
 use std::io;
-use bfrs_common::BFCommand;
-
-#[derive(Debug)]
-enum ParseError {
-    MissingLB(usize),
-    MissingRB(usize),
-}
-
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::MissingLB(i) => {
-                write!(f, "Missing matching square brace for closing one at {}", i)
-            }
-            Self::MissingRB(i) => {
-                write!(f, "Missing matching square brace for opening one at {}", i)
-            }
-        }
-    }
-}
-
-impl Error for ParseError {}
-
-fn parse(bytes: &[u8]) -> Result<Program, ParseError> {
-    let mut instructions = Vec::new();
-    let mut begin_vec = Vec::new();
-    let mut jumps = HashMap::new();
-    for (i, &byte) in bytes.iter().enumerate() {
-        if let Some(s) = BFCommand::from_u8(byte) {
-            match s {
-                BFCommand::BeginLoop => begin_vec.push(instructions.len()),
-                BFCommand::EndLoop => match begin_vec.pop() {
-                    None => return Err(ParseError::MissingLB(i)),
-                    Some(end) => {
-                        let curr_i = instructions.len();
-                        jumps.insert(end, curr_i);
-                        jumps.insert(curr_i, end);
-                    }
-                },
-                _ => (),
-            }
-            instructions.push(s);
-        }
-    }
-    if let Some(i) = begin_vec.pop() {
-        Err(ParseError::MissingRB(i))
-    } else {
-        Ok(Program {
-            instructions,
-            jumps,
-            tape_size: 30000,
-        })
-    }
-}
 
 use std::collections::HashMap;
 
@@ -62,6 +9,29 @@ struct Program {
     instructions: Vec<BFCommand>,
     tape_size: usize,
     jumps: HashMap<usize, usize>,
+}
+
+impl Program {
+    pub fn from_instructions(instructions: Vec<BFCommand>, tape_size: usize) -> Self {
+        let mut jumps = HashMap::new();
+        let mut jumps_backlog = Vec::new();
+        for (i, instr) in instructions.iter().enumerate() {
+            match instr {
+                BFCommand::BeginLoop => jumps_backlog.push(i),
+                BFCommand::EndLoop => {
+                    let other_i = jumps_backlog.pop().unwrap();
+                    jumps.insert(other_i, i);
+                    jumps.insert(i, other_i);
+                }
+                _ => (),
+            }
+        }
+        Program {
+            instructions,
+            tape_size,
+            jumps,
+        }
+    }
 }
 
 fn interpret(target: &Program) -> io::Result<Vec<u8>> {
@@ -145,18 +115,18 @@ fn highlight_code(program: &Program) {
 
 enum Input {
     Stdin(io::Stdin),
-    File(File, String),
+    File(File),
 }
 
 impl Input {
-    fn from_optional_arg(arg: Option<String>) -> io::Result<Self> {
+    fn from_optional_arg(arg: Option<String>) -> io::Result<(Self, String)> {
         match arg {
             Some(filename) if filename != "-" => {
-                File::open(&filename).map(|x| Self::File(x, filename))
+                File::open(&filename).map(|x| (Self::File(x), filename))
             }
             _ => {
                 eprintln!("[-][Reading from stdin]");
-                Ok(Self::Stdin(io::stdin()))
+                Ok((Self::Stdin(io::stdin()), String::from("<stdin>")))
             }
         }
     }
@@ -166,16 +136,7 @@ impl io::Read for Input {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Stdin(s) => s.lock().read(buf),
-            Self::File(f, _) => f.read(buf),
-        }
-    }
-}
-
-impl std::fmt::Display for Input {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::File(_, fname) => write!(f, "{}", fname),
-            Self::Stdin(_) => write!(f, "<stdin>"),
+            Self::File(f) => f.read(buf),
         }
     }
 }
@@ -210,21 +171,19 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    use std::io::Read;
     use std::time::Instant;
     let opt = Opt::from_args();
-    let mut input = Input::from_optional_arg(opt.input)?;
-    let mut input_bytes = Vec::new();
-    input.read_to_end(&mut input_bytes)?;
-    let mut program = parse(&input_bytes)?;
-    program.tape_size = opt.cells;
+    let (input, filename) = Input::from_optional_arg(opt.input)?;
+    let instructions: Vec<_> =
+        parser::parse(bfrs_input::bytes::BufferedBytes::new(input)).collect::<Result<_, _>>()?;
+    let program = Program::from_instructions(instructions, opt.cells);
     if opt.highlight_only {
         highlight_code(&program);
     } else {
         let start_time = Instant::now();
         let result_tape = interpret(&program)?;
         let time = Instant::now().duration_since(start_time);
-        eprintln!("program {} executed in {}us", input, time.as_micros());
+        eprintln!("program {} executed in {}us", filename, time.as_micros());
         if opt.show_tape {
             eprintln!("result tape: {:?}", result_tape);
         }

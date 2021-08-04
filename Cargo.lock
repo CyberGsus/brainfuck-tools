@@ -27,6 +27,7 @@ name = "bfrs"
 version = "0.1.0"
 dependencies = [
  "bfrs_common",
+ "bfrs_input",
  "structopt",
 ]
 
