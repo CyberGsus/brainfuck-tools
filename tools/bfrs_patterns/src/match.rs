@@ -55,11 +55,7 @@ impl<'a> MatchSM<'a> {
             }
         }
         Some(MatchResult {
-            commands: if machine.offset == 0 {
-                instructions
-            } else {
-                &instructions[..machine.offset]
-            },
+            commands: &instructions[..machine.offset],
             relative_offsets: machine.registry,
         })
     }
